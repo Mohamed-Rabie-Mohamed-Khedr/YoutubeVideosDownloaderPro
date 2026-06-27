@@ -145,9 +145,36 @@ namespace YoutubeVideosDownloaderPro.Core
             };
             for (int i = 0; i < videoStreams.Count; i++)
                 QualityComboBox.Items.Add(videoStreams[i].VideoQuality);
+            QualityComboBox.Items.Add("MP3");
             // تعيين الجودة الافتراضية إلى أعلى جودة متاحة
             QualityComboBox.SelectedIndex = 0;
             panel.Controls.Add(QualityComboBox);
+
+            System.Windows.Forms.ComboBox Mp3BitrateComboBox = new System.Windows.Forms.ComboBox()
+            {
+                Location = new System.Drawing.Point(260, 320),
+                Size = new System.Drawing.Size(100, 30),
+                DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
+                Font = LabelFont,
+                RightToLeft = System.Windows.Forms.RightToLeft.Yes,
+                Visible = false
+            };
+            Mp3BitrateComboBox.Items.Add("320k");
+            Mp3BitrateComboBox.Items.Add("256k");
+            Mp3BitrateComboBox.Items.Add("192k");
+            Mp3BitrateComboBox.Items.Add("160k");
+            Mp3BitrateComboBox.Items.Add("128k");
+            Mp3BitrateComboBox.Items.Add("96k");
+            Mp3BitrateComboBox.Items.Add("64k");
+            Mp3BitrateComboBox.Items.Add("32k");
+            Mp3BitrateComboBox.SelectedIndex = 5;
+
+            QualityComboBox.SelectedIndexChanged += (s, e) =>
+            {
+                Mp3BitrateComboBox.Visible = QualityComboBox.SelectedIndex >= videoStreams.Count;
+            };
+
+            panel.Controls.Add(Mp3BitrateComboBox);
 
             // 3. تحميل المقطع
             System.Windows.Forms.Button DownloadButton = new System.Windows.Forms.Button()
@@ -172,20 +199,27 @@ namespace YoutubeVideosDownloaderPro.Core
                 DownloadButton.Enabled = false;
                 DownloadButton.Tag = "Downloading";
                 downloadButtons.Add(DownloadButton);
+
+                QualityComboBox.Enabled = false;
+                Mp3BitrateComboBox.Enabled = false;
+
                 // 1. تنفيذ تحميل المقطع باستخدام selectedStream المختار من القائمة
-                var selectedStream = videoStreams[QualityComboBox.SelectedIndex];
+                VideoOnlyStreamInfo selectedStream = null;
+                if (QualityComboBox.SelectedIndex < videoStreams.Count)
+                    selectedStream = videoStreams[QualityComboBox.SelectedIndex];
 
                 // 2. تنظيف اسم الفيديو من الحروف غير الصالحة لتسمية الملفات في نظام التشغيل
                 string safeTitle = string.Join("_", video.Title.Split(Path.GetInvalidFileNameChars()));
+                string fileExtension = selectedStream != null ? ".mp4" : ".mp3";
                 int counter = 1;
-                while (File.Exists(Path.Combine(folderPath, $"{safeTitle}.mp4")))
+                while (File.Exists(Path.Combine(folderPath, $"{safeTitle}{fileExtension}")))
                 {
                     safeTitle = $"{safeTitle}_{counter}";
                     counter++;
                 }
 
                 // 3. دمج المسار بالكامل مع امتداد الملف المناسب
-                string fullOutputPath = Path.Combine(folderPath, $"{safeTitle}.mp4");
+                string fullOutputPath = Path.Combine(folderPath, $"{safeTitle}{fileExtension}");
 
                 // 4. جلب أعلى مسار صوت متاح لدمجه مع الفيديو المختار
                 var audioStreamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
@@ -213,11 +247,18 @@ namespace YoutubeVideosDownloaderPro.Core
                     });
 
                     // 1. تحميل الفيديو والصوت كملفات مؤقتة منفصلة (بدون أي pipe streaming)
-                    await youtube.Videos.Streams.DownloadAsync(selectedStream, tempVideoPath, progressHandler, cancellationTokenSource.Token);
-                    await youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, null, cancellationTokenSource.Token);
+                    if (selectedStream != null)
+                    {
+                        await youtube.Videos.Streams.DownloadAsync(selectedStream, tempVideoPath, progressHandler, cancellationTokenSource.Token);
+                        await youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, null, cancellationTokenSource.Token);
+                    }
+                    else
+                    {
+                        await youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, progressHandler, cancellationTokenSource.Token);
+                    }
+                    var ffmpegArgs = selectedStream != null ? $"-y -i \"{tempVideoPath}\" -i \"{tempAudioPath}\" -c copy \"{fullOutputPath}\""
+                    : $"-y -i \"{tempAudioPath}\" -vn -acodec libmp3lame -b:a {Mp3BitrateComboBox.SelectedItem} \"{fullOutputPath}\"";
 
-                    // 2. دمج الملفين بـ ffmpeg مباشرة عن طريق Process بدل CliWrap
-                    var ffmpegArgs = $"-y -i \"{tempVideoPath}\" -i \"{tempAudioPath}\" -c copy \"{fullOutputPath}\"";
                     var psi = new System.Diagnostics.ProcessStartInfo
                     {
                         FileName = ffmpegPath,
@@ -240,7 +281,6 @@ namespace YoutubeVideosDownloaderPro.Core
                         }
                     }
                     
-                    DownloadButton.Text = "تم التحميل بنجاح";
                     // 7. إظهار رسالة النجاح للمستخدم
                     System.Windows.Forms.MessageBox.Show(
                         $"تم تحميل المقطع بنجاح إلى:\n{fullOutputPath}",
@@ -266,12 +306,16 @@ namespace YoutubeVideosDownloaderPro.Core
                 }
                 finally
                 {
+                    DownloadButton.Text = "تحميل المقطع";
                     DownloadButton.Tag = null;
-                    downloadButtons.Remove(DownloadButton);
                     downloadButtons.ForEach(delegate (System.Windows.Forms.Button b)
                     {
                         if (b.Tag?.ToString() != "Downloading") b.Enabled = true;
                     });
+                    downloadButtons.Remove(DownloadButton);
+
+                    QualityComboBox.Enabled = true;
+                    Mp3BitrateComboBox.Enabled = true;
 
                     if (File.Exists(tempVideoPath)) File.Delete(tempVideoPath);
                     if (File.Exists(tempAudioPath)) File.Delete(tempAudioPath);
