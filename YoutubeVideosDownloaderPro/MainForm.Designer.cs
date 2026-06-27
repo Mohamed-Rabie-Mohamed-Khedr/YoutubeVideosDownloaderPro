@@ -157,6 +157,7 @@
             this.textBox1.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.textBox1.Size = new System.Drawing.Size(400, 33);
             this.textBox1.TabIndex = 1;
+            this.textBox1.Text = "https://www.youtube.com/watch?v=R0W8fUe0UNM";
             // 
             // pictureBox1
             // 

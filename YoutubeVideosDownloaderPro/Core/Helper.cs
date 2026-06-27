@@ -121,16 +121,7 @@ namespace YoutubeVideosDownloaderPro.Core
                     throw new Exception("ffmpeg.exe not found inside the zip archive.");
                 }
             }
-            catch (OperationCanceledException)
-            {
-                // التعامل مع حالة إذا قام المستخدم بإلغاء العملية بنفسه
-                targetFilePath = null;
-            }
-            catch (Exception ex)
-            {
-                targetFilePath = null;
-                MessageBox.Show($"فشل تحميل ملفات الدمج التلقائية. يرجى التأكد من اتصال الإنترنت.\nالسبب: {ex.Message}", "خطأ في التهيئة", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MessageBoxOptions.RightAlign);
-            }
+            catch { targetFilePath = null; }
             finally
             {
                 // 6. تنظيف الملفات والمجلدات المؤقتة

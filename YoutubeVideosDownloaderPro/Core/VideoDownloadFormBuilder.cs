@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using YoutubeExplode;
-using YoutubeExplode.Converter;
 using YoutubeExplode.Videos.Streams;
 
 namespace YoutubeVideosDownloaderPro.Core
@@ -17,9 +16,14 @@ namespace YoutubeVideosDownloaderPro.Core
         private static readonly System.Drawing.Font LabelFont = new System.Drawing.Font("Arial", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
         private static readonly YoutubeClient youtube = new YoutubeClient();
         private static readonly HttpClient HttpClient = new HttpClient();
-        private static System.Threading.CancellationTokenSource cancellationTokenSource = new System.Threading.CancellationTokenSource();
         private static string folderPath, ffmpegPath;
-        private static bool isVideoDownloading = false;
+        private static List<System.Windows.Forms.Button> downloadButtons = new List<System.Windows.Forms.Button>();
+
+
+        private static bool IsVideoDownloading()
+        {
+            return downloadButtons.Any(b => b.Tag?.ToString() == "Downloading");
+        }
         private static bool IsValidYouTubeUrl(string url)
         {
             return Regex.IsMatch(url.Trim(), @"^([a-zA-Z0-9_-]{11}|(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*)$");
@@ -39,12 +43,6 @@ namespace YoutubeVideosDownloaderPro.Core
                 return;
             }
 
-            if (cancellationTokenSource.IsCancellationRequested)
-            {
-                cancellationTokenSource.Dispose();
-                cancellationTokenSource = new System.Threading.CancellationTokenSource();
-            }
-
             var downloadForm = new System.Windows.Forms.Form()
             {
                 Name = "DownloadForm",
@@ -59,14 +57,15 @@ namespace YoutubeVideosDownloaderPro.Core
                 RightToLeftLayout = true,
                 AutoScroll = true,
             };
+            
+            System.Threading.CancellationTokenSource cancellationTokenSource = new System.Threading.CancellationTokenSource();
             downloadForm.FormClosing += (s, e) =>
             {
-                if (isVideoDownloading)
+                if (IsVideoDownloading())
                 {
                     var result = System.Windows.Forms.MessageBox.Show("هناك عملية تحميل جارية. هل أنت متأكد أنك تريد إغلاق النافذة؟", "تأكيد الإغلاق", System.Windows.Forms.MessageBoxButtons.YesNo, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button2, System.Windows.Forms.MessageBoxOptions.RightAlign);
                     if (result == System.Windows.Forms.DialogResult.Yes)
                     {
-                        isVideoDownloading = false;
                         cancellationTokenSource.Cancel();
                         // تنظيف الموارد عند إغلاق الشاشة
                     }
@@ -81,7 +80,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 {
                     // الحصول على بيانات الفيديو من يوتيوب (اسم، الناشر، الصورة المصغرة، إلخ)
                     var video = await youtube.Videos.GetAsync(videoUrls[i]);
-                    var panel = await CreateVideoPanelAsync(video, yOffset);
+                    var panel = await CreateVideoPanelAsync(video, yOffset, cancellationTokenSource);
                     downloadForm.Controls.Add(panel);
                 }
                 catch (Exception)
@@ -94,12 +93,12 @@ namespace YoutubeVideosDownloaderPro.Core
 
             downloadForm.ShowDialog();
         }
-        private static async Task<System.Windows.Forms.Panel> CreateVideoPanelAsync(YoutubeExplode.Videos.Video video, int yOffset)
+        private static async Task<System.Windows.Forms.Panel> CreateVideoPanelAsync(YoutubeExplode.Videos.Video video, int yOffset, System.Threading.CancellationTokenSource cancellationTokenSource)
         {
             var panel = new System.Windows.Forms.Panel()
             {
                 Location = new System.Drawing.Point(10, yOffset),
-                Size = new System.Drawing.Size(660, 330),
+                Size = new System.Drawing.Size(660, 360),
                 BackColor = System.Drawing.Color.LightGray,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
@@ -138,7 +137,7 @@ namespace YoutubeVideosDownloaderPro.Core
 
             System.Windows.Forms.ComboBox QualityComboBox = new System.Windows.Forms.ComboBox()
             {
-                Location = new System.Drawing.Point(370, 290),
+                Location = new System.Drawing.Point(370, 320),
                 Size = new System.Drawing.Size(100, 30),
                 DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
                 Font = LabelFont,
@@ -154,17 +153,25 @@ namespace YoutubeVideosDownloaderPro.Core
             System.Windows.Forms.Button DownloadButton = new System.Windows.Forms.Button()
             {
                 Text = "تحميل المقطع",
-                Location = new System.Drawing.Point(490, 290),
+                Location = new System.Drawing.Point(490, 320),
                 Size = new System.Drawing.Size(160, 30),
                 Font = LabelFont,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes,
                 BackColor = System.Drawing.Color.Green,
                 ForeColor = System.Drawing.Color.White
             };
+
+            panel.Controls.Add(AddLabel($"اسم المقطع: {video.Title}", 200));
+            panel.Controls.Add(AddLabel($"صاحب المقطع: {video.Author.ChannelTitle}", 230));
+            panel.Controls.Add(AddLabel($"مدة المقطع: {video.Duration?.ToString(@"hh\:mm\:ss") ?? "غير معروف"}", 260));
+            var percentageLabel = AddLabel("0%", 290);
+            panel.Controls.Add(percentageLabel);
+
             DownloadButton.Click += async (s, e) =>
             {
                 DownloadButton.Enabled = false;
-                isVideoDownloading = true;
+                DownloadButton.Tag = "Downloading";
+                downloadButtons.Add(DownloadButton);
                 // 1. تنفيذ تحميل المقطع باستخدام selectedStream المختار من القائمة
                 var selectedStream = videoStreams[QualityComboBox.SelectedIndex];
 
@@ -183,46 +190,70 @@ namespace YoutubeVideosDownloaderPro.Core
                 // 4. جلب أعلى مسار صوت متاح لدمجه مع الفيديو المختار
                 var audioStreamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
 
-                // 5. مصفوفة تحتوي على مسار الفيديو ومسار الصوت اللذان تم اختيارهما
-                var streamInfos = new IStreamInfo[] { selectedStream, audioStreamInfo };
-
                 DownloadButton.Text = "جاري التحميل...";
-                // 6. التأكد من وجود ملف ffmpeg.exe في مجلد برنامجك، وإذا لم يكن موجوداً، قم بتحميله تلقائياً من الإنترنت
-                if (string.IsNullOrEmpty(ffmpegPath))
-                {
-                    ffmpegPath = await Helper.EnsureFFmpegExistsAsync(cancellationTokenSource);
-                    if (string.IsNullOrEmpty(ffmpegPath))
-                    {
-                        isVideoDownloading = false;
-                        System.Windows.Forms.Application.OpenForms["DownloadForm"]?.Close();
-                        return;
-                    }
-                }
-
-                // تحديد صيغة الملف النهائي
-                var container = Container.Mp4;
-
-                // تحديد سرعة/جودة التحويل (Preset)
-                var preset = ConversionPreset.UltraFast;
-
-                // قاموس فارغ لمتغيرات البيئة (يمكن تركه فارغاً)
-                var envVars = new Dictionary<string, string>();
-
-                // إنشاء كائن الـ Request بالمعاملات الخمسة كاملة كما يطلبها بروتوكول المكتبة لديك
-                var conversionRequest = new ConversionRequest(
-                    ffmpegPath,
-                    fullOutputPath,
-                    container,
-                    preset,
-                    envVars
-                );
-
+                string tempVideoPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_video.tmp");
+                string tempAudioPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_audio.tmp");
                 try
                 {
-                    // استدعاء دالة التحميل والدمج عبر الـ Request المكتمل
-                    await youtube.Videos.DownloadAsync(streamInfos, conversionRequest, null, cancellationTokenSource.Token);
+                    // 6. التأكد من وجود ملف ffmpeg.exe في مجلد برنامجك، وإذا لم يكن موجوداً، قم بتحميله تلقائياً من الإنترنت
+                    if (string.IsNullOrEmpty(ffmpegPath))
+                    {
+                        downloadButtons.ForEach(b => b.Enabled = false);
+                        ffmpegPath = await Helper.EnsureFFmpegExistsAsync(cancellationTokenSource);
+                        if (string.IsNullOrEmpty(ffmpegPath))
+                        {
+                            System.Windows.Forms.MessageBox.Show("تعذّر تحميل ffmpeg.exe، تأكد من اتصال الإنترنت وحاول مرة أخرى", "خطأ", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+                            throw new Exception("ffmpeg.exe download failed");
+                        }
+                    }
+
+                    var progressHandler = new Progress<double>(value =>
+                    {
+                        percentageLabel.Text = $"{(int)(value * 100)}%";
+                    });
+
+                    // 1. تحميل الفيديو والصوت كملفات مؤقتة منفصلة (بدون أي pipe streaming)
+                    await youtube.Videos.Streams.DownloadAsync(selectedStream, tempVideoPath, progressHandler, cancellationTokenSource.Token);
+                    await youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, null, cancellationTokenSource.Token);
+
+                    // 2. دمج الملفين بـ ffmpeg مباشرة عن طريق Process بدل CliWrap
+                    var ffmpegArgs = $"-y -i \"{tempVideoPath}\" -i \"{tempAudioPath}\" -c copy \"{fullOutputPath}\"";
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = ffmpegPath,
+                        Arguments = ffmpegArgs,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                    using (var process = System.Diagnostics.Process.Start(psi))
+                    {
+                        // تسجيل دالة تقتل العملية لو المستخدم عمل cancel
+                        using (cancellationTokenSource.Token.Register(() =>
+                        {
+                            try { if (!process.HasExited) process.Kill(); } catch { }
+                        }))
+                        {
+                            // تشغيل الانتظار المتزامن (WaitForExit) جوه Task.Run عشان مايعملش block للواجهة
+                            await Task.Run(() => process.WaitForExit());
+                            cancellationTokenSource.Token.ThrowIfCancellationRequested();
+                        }
+                    }
+                    
                     DownloadButton.Text = "تم التحميل بنجاح";
+                    // 7. إظهار رسالة النجاح للمستخدم
+                    System.Windows.Forms.MessageBox.Show(
+                        $"تم تحميل المقطع بنجاح إلى:\n{fullOutputPath}",
+                        "نجاح",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Information,
+                        System.Windows.Forms.MessageBoxDefaultButton.Button1,
+                        System.Windows.Forms.MessageBoxOptions.RightAlign
+                        );
+                    // فتح المجلد الذي تم حفظ الفيديو فيه
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{fullOutputPath}\"");
                 }
+                catch (OperationCanceledException) {}
                 catch
                 {
                     System.Windows.Forms.MessageBox.Show(
@@ -233,34 +264,29 @@ namespace YoutubeVideosDownloaderPro.Core
                         System.Windows.Forms.MessageBoxDefaultButton.Button1,
                         System.Windows.Forms.MessageBoxOptions.RightAlign);
                 }
-                isVideoDownloading = false;
-                // 7. إظهار رسالة النجاح للمستخدم
-                System.Windows.Forms.MessageBox.Show(
-                    $"تم تحميل المقطع بنجاح إلى:\n{fullOutputPath}",
-                    "نجاح",
-                    System.Windows.Forms.MessageBoxButtons.OK,
-                    System.Windows.Forms.MessageBoxIcon.Information,
-                    System.Windows.Forms.MessageBoxDefaultButton.Button1,
-                    System.Windows.Forms.MessageBoxOptions.RightAlign
-                    );
-                // فتح المجلد الذي تم حفظ الفيديو فيه
-                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{fullOutputPath}\"");
-                };
+                finally
+                {
+                    DownloadButton.Tag = null;
+                    downloadButtons.Remove(DownloadButton);
+                    downloadButtons.ForEach(delegate (System.Windows.Forms.Button b)
+                    {
+                        if (b.Tag?.ToString() != "Downloading") b.Enabled = true;
+                    });
+
+                    if (File.Exists(tempVideoPath)) File.Delete(tempVideoPath);
+                    if (File.Exists(tempAudioPath)) File.Delete(tempAudioPath);
+                }
+            };
             panel.Controls.Add(DownloadButton);
-            
-            AddLabel(panel, $"اسم المقطع: {video.Title}", 200);
-            AddLabel(panel, $"صاحب المقطع: {video.Author.ChannelTitle}", 230);
-            AddLabel(panel, $"مدة المقطع: {video.Duration?.ToString(@"hh\:mm\:ss") ?? "غير معروف"}", 260);
             return panel;
         }
 
         private static System.Windows.Forms.Panel CreateErrorPanel(string url, int yOffset)
         {
-            isVideoDownloading = false;
             var panel = new System.Windows.Forms.Panel()
             {
                 Location = new System.Drawing.Point(10, yOffset),
-                Size = new System.Drawing.Size(660, 330),
+                Size = new System.Drawing.Size(660, 360),
                 BackColor = System.Drawing.Color.LightGray,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
@@ -315,7 +341,7 @@ namespace YoutubeVideosDownloaderPro.Core
             }
         }
 
-        private static void AddLabel(System.Windows.Forms.Panel panel, string text, int yPosition)
+        private static System.Windows.Forms.Label AddLabel(string text, int yPosition)
         {
             var label = new System.Windows.Forms.Label()
             {
@@ -325,7 +351,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 Font = LabelFont,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
-            panel.Controls.Add(label);
+            return label;
         }
     }
 }
