@@ -55,7 +55,7 @@ namespace YoutubeVideosDownloaderPro.Core
 
 
 
-        public static async Task<string> EnsureFFmpegExistsAsync(CancellationTokenSource cancellationTokenSource)
+        public static async Task<string> EnsureFFmpegExistsAsync(CancellationToken cancellationToken)
         {
             // 1. تحديد مسار ملف ffmpeg النهائي في مجلد برنامجك
             string targetFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg.exe");
@@ -84,19 +84,26 @@ namespace YoutubeVideosDownloaderPro.Core
 
             try
             {
+                // المسؤولة عن إرسال طلبات HTTP (زي تحميل ملفات من الإنترنت).
                 using (var httpClient = new HttpClient())
                 {
-                    // 2. تحميل ملف ffmpeg-ZIP من الإنترنت إلى مجلد مؤقت
-                    var response = await httpClient.GetAsync(downloadUrl, cancellationTokenSource.Token);
-                    response.EnsureSuccessStatusCode(); // التأكد من أن السيرفر استجاب بـ 200 OK
+                    // ResponseHeadersRead حمل محتوى على دفعات، بحيث نقدر نبدأ في الكتابة على القرص قبل ما يكتمل التحميل بالكامل.
+                    var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    response.EnsureSuccessStatusCode();
 
-                    // قراءة محتوى الاستجابة كـ byte array
-                    var zipBytes = await response.Content.ReadAsByteArrayAsync();
-
-                    // حفظ محتوى الاستجابة في ملف ZIP في المجلد المستخرج
+                    // 2. حفظ ملف ZIP المؤقت على القرص
+                    using (var responseStream = await response.Content.ReadAsStreamAsync())
                     using (var fs = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
                     {
-                        await fs.WriteAsync(zipBytes, 0, zipBytes.Length, cancellationTokenSource.Token);
+                        // مصفوفة للقراءة والكتابة من وإلى محتوى الاستجابة، بحجم 80 كيلوبايت لكل عملية.
+                        byte[] buffer = new byte[81920];
+                        // متغير هيحمل "عدد البايتات الفعلية" اللي اتقرت في كل دورة من الحلقة
+                        int bytesRead;
+                        // حلقة لقراءة البيانات من الاستجابة وكتابتها في الملف المؤقت
+                        while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                        {
+                            await fs.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                        }
                     }
                 }
 
@@ -120,6 +127,11 @@ namespace YoutubeVideosDownloaderPro.Core
                 {
                     throw new Exception("ffmpeg.exe not found inside the zip archive.");
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                targetFilePath = null;
+                throw; // أعد رميها عشان الـ caller يتعرف عليها كـ cancellation حقيقي
             }
             catch { targetFilePath = null; }
             finally
