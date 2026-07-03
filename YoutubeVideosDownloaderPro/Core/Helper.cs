@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -11,26 +12,43 @@ namespace YoutubeVideosDownloaderPro.Core
 {
     internal class Helper
     {
+        private static readonly Regex PlaylistUrlRegex = new Regex(@"[?&]list=([a-zA-Z0-9_-]+)", RegexOptions.IgnoreCase);
+
+        public static bool IsPlaylistUrl(string url)
+        {
+            return !string.IsNullOrWhiteSpace(url) && PlaylistUrlRegex.IsMatch(url.Trim());
+        }
+
+        public static bool IsValidYouTubeUrl(string url)
+        {
+            return !string.IsNullOrWhiteSpace(url) && Regex.IsMatch(url.Trim(), @"^([a-zA-Z0-9_-]{11}|(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*)$");
+        }
+
         // تعريف الـ GUID الخاص بمجلد التحميلات في نظام ويندوز
         private static readonly Guid DownloadsGuid = new Guid("374DE290-123F-4565-9164-39C4925E467B");
 
         // استيراد الدالة الخاصة بجلب المجلدات النظامية من ويندوز
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
         private static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid rfid, uint dwFlags, IntPtr hToken, out string ppszPath);
+        private const string RegistryPath = @"Software\YoutubeVideosDownloaderPro";
         public static string GetDownloadsFolder()
         {
             // تحقق من وجود مسار التحميلات في الريجستري أولاً
-            using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\DownloadYoutubeVideosApp"))
+            try
             {
-                if (rk != null)
+                using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(RegistryPath))
                 {
-                    object value = rk.GetValue("DownloadsPath");
-                    if (value != null)
+                    if (rk != null)
                     {
-                        return value.ToString();
+                        object value = rk.GetValue("DownloadsPath");
+                        if (value != null)
+                        {
+                            return value.ToString();
+                        }
                     }
                 }
             }
+            catch {}
 
             // استخدام SHGetKnownFolderPath لجلب مسار التحميلات
             int result = SHGetKnownFolderPath(DownloadsGuid, 0, IntPtr.Zero, out string path);
@@ -47,7 +65,7 @@ namespace YoutubeVideosDownloaderPro.Core
 
         public static void DownloadsPathSave(string path)
         {
-            using (RegistryKey rk = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\DownloadYoutubeVideosApp", true))
+            using (RegistryKey rk = Registry.CurrentUser.CreateSubKey(RegistryPath, true))
             {
                 rk.SetValue("DownloadsPath", path);
             }

@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using YoutubeExplode;
@@ -18,11 +17,6 @@ namespace YoutubeVideosDownloaderPro.Core
         private static readonly YoutubeClient youtube = new YoutubeClient();
         private static readonly HttpClient httpClient = new HttpClient();
         private static string ffmpegPath;
-        
-        public static bool IsValidYouTubeUrl(string url)
-        {
-            return Regex.IsMatch(url.Trim(), @"^([a-zA-Z0-9_-]{11}|(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*)$");
-        }
 
         public static async Task<Video> GetVideoAsync(string videoUrl, CancellationToken cancellationToken) =>
             await youtube.Videos.GetAsync(videoUrl, cancellationToken);
@@ -86,6 +80,10 @@ namespace YoutubeVideosDownloaderPro.Core
             CancellationToken cancellationToken)
         {
             var audioStreamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+            if (audioStreamInfo == null)
+            {
+                throw new InvalidOperationException("هذا الفيديو لا يحتوي على مسار صوتي.");
+            }
             string tempVideoPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_video.tmp");
             string tempAudioPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_audio.tmp");
 
@@ -93,14 +91,15 @@ namespace YoutubeVideosDownloaderPro.Core
             {
                 if (selectedVideoStream != null)
                 {
-                    await youtube.Videos.Streams.DownloadAsync(selectedVideoStream, tempVideoPath, progress, cancellationToken);
-                    await youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, null, cancellationToken);
+                    var videoTask = youtube.Videos.Streams.DownloadAsync(selectedVideoStream, tempVideoPath, progress, cancellationToken).AsTask();
+                    var audioTask = youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, null, cancellationToken).AsTask();
+
+                    await Task.WhenAll(videoTask, audioTask);
                 }
                 else
                 {
                     await youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, progress, cancellationToken);
                 }
-
                 string ffmpegArgs = selectedVideoStream != null
                     ? $"-y -i \"{tempVideoPath}\" -i \"{tempAudioPath}\" -c copy \"{fullOutputPath}\""
                     : $"-y -i \"{tempAudioPath}\" -vn -acodec libmp3lame -b:a {mp3Bitrate} \"{fullOutputPath}\"";

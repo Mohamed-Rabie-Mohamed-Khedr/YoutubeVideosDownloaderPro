@@ -13,18 +13,21 @@ namespace YoutubeVideosDownloaderPro.Core
         private static readonly System.Drawing.Size LabelSize = new System.Drawing.Size(640, 23);
         private static readonly System.Drawing.Font LabelFont = new System.Drawing.Font("Arial", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
         private static string folderPath;
-        private static List<System.Windows.Forms.Button> downloadButtons = new List<System.Windows.Forms.Button>();
+        private static List<System.Windows.Forms.Button> downloadButtons = new();
+        private static System.Threading.SemaphoreSlim semaphore = new System.Threading.SemaphoreSlim(5);
 
         private static bool IsVideoDownloading()
         {
             return downloadButtons.Any(b => b.Tag?.ToString() == "Downloading");
         }
         
-        public static async Task BuildVideoDownloadFormAsync(string[] videoUrls, string folderPath)
+        public static async Task BuildVideoDownloadFormAsync(List<string> videoUrls, string folderPath)
         {
             VideoDownloadFormBuilder.folderPath = folderPath;
-            videoUrls = videoUrls?.Where(url => !string.IsNullOrWhiteSpace(url) && VideoDownloadService.IsValidYouTubeUrl(url)).ToArray() ?? Array.Empty<string>();
-            if (videoUrls.Length == 0)
+            videoUrls = videoUrls?
+                .Where(url => Helper.IsValidYouTubeUrl(url))
+                .ToList() ?? new List<string>();
+            if (videoUrls.Count == 0)
             {
                 System.Windows.Forms.MessageBox.Show("الرجاء إدخال رابط المقطع أو معرّف يوتيوب صحيح", "خطأ في الإدخال", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.RightAlign);
                 return;
@@ -59,26 +62,44 @@ namespace YoutubeVideosDownloaderPro.Core
             };
 
             int yOffset = 20;
-            for (var i = 0; i < videoUrls.Length; i++)
+            var fetchTasks = videoUrls.Select(async url =>
             {
+                await semaphore.WaitAsync(cancellationTokenSource.Token);
                 try
                 {
-                    var video = await VideoDownloadService.GetVideoAsync(videoUrls[i], cancellationTokenSource.Token);
-                    var panel = await CreateVideoPanelAsync(video, yOffset, cancellationTokenSource.Token);
+                    var video = await VideoDownloadService.GetVideoAsync(url, cancellationTokenSource.Token);
+                    var manifest = await VideoDownloadService.GetStreamManifestAsync(video.Id, cancellationTokenSource.Token);
+                    return (Url: url, Video: video, Manifest: manifest);
+                }
+                catch
+                {
+                    return (Url: url, Video: null, Manifest: null);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }).ToList();
+
+            var results = await Task.WhenAll(fetchTasks);
+            
+            // دلوقتي نبني الـ UI بالترتيب الأصلي بعد ما البيانات كلها جاهزة
+            foreach (var result in results)
+            {
+                if (result.Video == null)
+                    downloadForm.Controls.Add(CreateErrorPanel(result.Url, yOffset));
+                else
+                {
+                    var panel = await CreateVideoPanelAsync(result.Video, result.Manifest, yOffset, cancellationTokenSource.Token);
                     downloadForm.Controls.Add(panel);
                 }
-                catch (Exception)
-                {
-                    var errorPanel = CreateErrorPanel(videoUrls[i], yOffset);
-                    downloadForm.Controls.Add(errorPanel);
-                }
-                yOffset += 340;
+                    yOffset += 340;
             }
 
             downloadForm.ShowDialog();
         }
 
-        private static async Task<System.Windows.Forms.Panel> CreateVideoPanelAsync(Video video, int yOffset, System.Threading.CancellationToken cancellationToken)
+        private static async Task<System.Windows.Forms.Panel> CreateVideoPanelAsync(Video video, StreamManifest streamManifest, int yOffset, System.Threading.CancellationToken cancellationToken)
         {
             var panel = new System.Windows.Forms.Panel()
             {
@@ -98,17 +119,7 @@ namespace YoutubeVideosDownloaderPro.Core
             };
             await LoadThumbnailIntoPictureBoxAsync(pictureBox, video, cancellationToken);
             panel.Controls.Add(pictureBox);
-
-            StreamManifest streamManifest;
-            try
-            {
-                streamManifest = await VideoDownloadService.GetStreamManifestAsync(video.Id, cancellationToken);
-            }
-            catch
-            {
-                return CreateErrorPanel(video.Url, yOffset);
-            }
-
+            
             var videoStreams = VideoDownloadService.GetBestVideoStreams(streamManifest);
             if (!videoStreams.Any()) return CreateErrorPanel(video.Url, yOffset);
 
