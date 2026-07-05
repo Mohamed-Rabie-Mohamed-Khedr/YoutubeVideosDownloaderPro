@@ -9,7 +9,7 @@
     <RootNamespace>YoutubeVideosDownloaderPro</RootNamespace>
     <AssemblyName>Youtube Videos Downloader Pro</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-	  <LangVersion>14.0</LangVersion>
+    <LangVersion>14.0</LangVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>

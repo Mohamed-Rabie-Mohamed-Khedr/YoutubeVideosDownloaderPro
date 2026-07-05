@@ -14,8 +14,8 @@ namespace YoutubeVideosDownloaderPro.Core
         private static readonly System.Drawing.Font LabelFont = new System.Drawing.Font("Arial", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
         private static string folderPath;
         private static List<System.Windows.Forms.Button> downloadButtons = new();
-        private static System.Threading.SemaphoreSlim semaphore = new System.Threading.SemaphoreSlim(5);
-
+        private static System.Threading.SemaphoreSlim videoInfoSemaphore = new System.Threading.SemaphoreSlim(5);
+        private static Dictionary<System.Windows.Forms.Button, TaskCompletionSource<bool>> downloadCompletions = new();
         private static bool IsVideoDownloading()
         {
             return downloadButtons.Any(b => b.Tag?.ToString() == "Downloading");
@@ -61,10 +61,42 @@ namespace YoutubeVideosDownloaderPro.Core
                 }
             };
 
-            int yOffset = 20;
+            int yOffset;
+            if (videoUrls.Count > 1)
+            {
+                var downloadAllButton = new System.Windows.Forms.Button()
+                {
+                    Text = "تحميل جميع المقاطع",
+                    Location = new System.Drawing.Point(10, 10),
+                    Size = new System.Drawing.Size(660, 40),
+                    Font = LabelFont,
+                    RightToLeft = System.Windows.Forms.RightToLeft.Yes,
+                    BackColor = System.Drawing.Color.Blue,
+                    ForeColor = System.Drawing.Color.White
+                };
+                downloadAllButton.Click += async (s, e) =>
+                {
+                    downloadAllButton.Enabled = false;
+                    var buttonsSnapshot = downloadButtons.ToList();
+                    foreach (var button in buttonsSnapshot)
+                    {
+                        if (string.IsNullOrEmpty(button.Tag?.ToString()))
+                        {
+                            var tcs = new TaskCompletionSource<bool>();
+                            downloadCompletions[button] = tcs;
+                            button.PerformClick(); // بيتنفذ على الـ UI thread زي ما المفروض
+                            await tcs.Task; // بتستنى هنا لحد ما التحميل يخلص فعلاً، من غير ما تعمل block
+                        }
+                    }
+                };
+                downloadForm.Controls.Add(downloadAllButton);
+                yOffset = 50;
+            }
+            else
+                yOffset = 0;
             var fetchTasks = videoUrls.Select(async url =>
             {
-                await semaphore.WaitAsync(cancellationTokenSource.Token);
+                await videoInfoSemaphore.WaitAsync(cancellationTokenSource.Token);
                 try
                 {
                     var video = await VideoDownloadService.GetVideoAsync(url, cancellationTokenSource.Token);
@@ -77,7 +109,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 }
                 finally
                 {
-                    semaphore.Release();
+                    videoInfoSemaphore.Release();
                 }
             }).ToList();
 
@@ -93,7 +125,7 @@ namespace YoutubeVideosDownloaderPro.Core
                     var panel = await CreateVideoPanelAsync(result.Video, result.Manifest, yOffset, cancellationTokenSource.Token);
                     downloadForm.Controls.Add(panel);
                 }
-                    yOffset += 340;
+                    yOffset += 360;
             }
 
             downloadForm.ShowDialog();
@@ -125,8 +157,8 @@ namespace YoutubeVideosDownloaderPro.Core
 
             System.Windows.Forms.ComboBox QualityComboBox = new System.Windows.Forms.ComboBox()
             {
-                Location = new System.Drawing.Point(370, 320),
-                Size = new System.Drawing.Size(100, 30),
+                Location = new System.Drawing.Point(350, 320),
+                Size = new System.Drawing.Size(130, 30),
                 DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
                 Font = LabelFont,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
@@ -139,7 +171,7 @@ namespace YoutubeVideosDownloaderPro.Core
 
             System.Windows.Forms.ComboBox Mp3BitrateComboBox = new System.Windows.Forms.ComboBox()
             {
-                Location = new System.Drawing.Point(260, 320),
+                Location = new System.Drawing.Point(240, 320),
                 Size = new System.Drawing.Size(100, 30),
                 DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
                 Font = LabelFont,
@@ -156,12 +188,6 @@ namespace YoutubeVideosDownloaderPro.Core
             Mp3BitrateComboBox.Items.Add("32k");
             Mp3BitrateComboBox.SelectedIndex = 3;
 
-            QualityComboBox.SelectedIndexChanged += (s, e) =>
-            {
-                Mp3BitrateComboBox.Visible = QualityComboBox.SelectedIndex >= videoStreams.Count;
-            };
-            panel.Controls.Add(Mp3BitrateComboBox);
-
             System.Windows.Forms.Button DownloadButton = new System.Windows.Forms.Button()
             {
                 Text = "تحميل المقطع",
@@ -173,17 +199,25 @@ namespace YoutubeVideosDownloaderPro.Core
                 ForeColor = System.Drawing.Color.White
             };
 
+            QualityComboBox.SelectedIndexChanged += (s, e) =>
+            {
+                Mp3BitrateComboBox.Visible = QualityComboBox.SelectedIndex >= videoStreams.Count;
+                DownloadButton.Enabled = true;
+            };
+            panel.Controls.Add(Mp3BitrateComboBox);
+
             panel.Controls.Add(AddLabel($"اسم المقطع: {video.Title}", 200));
             panel.Controls.Add(AddLabel($"صاحب المقطع: {video.Author.ChannelTitle}", 230));
             panel.Controls.Add(AddLabel($"مدة المقطع: {video.Duration?.ToString(@"hh\:mm\:ss") ?? "غير معروف"}", 260));
             var percentageLabel = AddLabel("0%", 290);
+            downloadButtons.Add(DownloadButton);
             panel.Controls.Add(percentageLabel);
 
             DownloadButton.Click += async (s, e) =>
             {
-                DownloadButton.Enabled = false;
+                downloadButtons.Remove(DownloadButton);
                 DownloadButton.Tag = "Downloading";
-                downloadButtons.Add(DownloadButton);
+                DownloadButton.Enabled = false;
                 QualityComboBox.Enabled = false;
                 Mp3BitrateComboBox.Enabled = false;
 
@@ -215,36 +249,31 @@ namespace YoutubeVideosDownloaderPro.Core
 
                     string mp3Bitrate = Mp3BitrateComboBox.SelectedItem.ToString();
                     await VideoDownloadService.DownloadAndProcessAsync(streamManifest, selectedStream, mp3Bitrate, fullOutputPath, progressHandler, cancellationToken);
-
-                    System.Windows.Forms.MessageBox.Show(
-                        $"تم تحميل المقطع بنجاح إلى:\n{fullOutputPath}",
-                        "نجاح",
-                        System.Windows.Forms.MessageBoxButtons.OK,
-                        System.Windows.Forms.MessageBoxIcon.Information,
-                        System.Windows.Forms.MessageBoxDefaultButton.Button1,
-                        System.Windows.Forms.MessageBoxOptions.RightAlign);
-                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{fullOutputPath}\"");
+                    DownloadButton.Tag = "Downloaded";
+                    percentageLabel.Text = "تم تحميل المقطع بنجاح";
+                    if (downloadButtons.Count == 0)
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{fullOutputPath}\"");
                 }
                 catch (OperationCanceledException) { }
                 catch
                 {
-                    System.Windows.Forms.MessageBox.Show(
-                        "حدث خطأ أثناء تحميل المقطع",
-                        "خطأ في التحميل",
-                        System.Windows.Forms.MessageBoxButtons.OK,
-                        System.Windows.Forms.MessageBoxIcon.Error,
-                        System.Windows.Forms.MessageBoxDefaultButton.Button1,
-                        System.Windows.Forms.MessageBoxOptions.RightAlign);
+                    DownloadButton.Tag = null;
+                    DownloadButton.Enabled = true;
+                    percentageLabel.Text = "حدث خطأ أثناء تحميل المقطع";
                 }
                 finally
                 {
                     DownloadButton.Text = "تحميل المقطع";
-                    DownloadButton.Tag = null;
                     downloadButtons.ForEach(b => { if (b.Tag?.ToString() != "Downloading") b.Enabled = true; });
-                    downloadButtons.Remove(DownloadButton);
-
                     QualityComboBox.Enabled = true;
                     Mp3BitrateComboBox.Enabled = true;
+
+
+                    if (downloadCompletions.TryGetValue(DownloadButton, out var tcs))
+                    {
+                        downloadCompletions.Remove(DownloadButton);
+                        tcs.TrySetResult(true);
+                    }
                 }
             };
             panel.Controls.Add(DownloadButton);

@@ -108,6 +108,7 @@
             this.playlistUrlTextBox.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.playlistUrlTextBox.Size = new System.Drawing.Size(400, 33);
             this.playlistUrlTextBox.TabIndex = 6;
+            this.playlistUrlTextBox.Text = "https://www.youtube.com/playlist?list=PLgGm70vff07Oro3XytavIQdAfZZ9sSgj5";
             // 
             // playlistPictureBox
             // 
@@ -221,6 +222,7 @@
             this.videoUrlTextBox.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.videoUrlTextBox.Size = new System.Drawing.Size(400, 33);
             this.videoUrlTextBox.TabIndex = 1;
+            this.videoUrlTextBox.Text = "https://www.youtube.com/watch?v=SHwQEvkZXT0";
             // 
             // videoPictureBox
             // 
