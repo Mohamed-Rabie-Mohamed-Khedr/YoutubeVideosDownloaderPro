@@ -42,7 +42,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 MinimizeBox = false,
                 FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle,
                 Size = new System.Drawing.Size(700, 900),
-                BackColor = System.Drawing.Color.White,
+                BackColor = System.Drawing.Color.FromArgb(22, 22, 22),
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes,
                 RightToLeftLayout = true,
                 AutoScroll = true,
@@ -71,9 +71,11 @@ namespace YoutubeVideosDownloaderPro.Core
                     Size = new System.Drawing.Size(660, 40),
                     Font = LabelFont,
                     RightToLeft = System.Windows.Forms.RightToLeft.Yes,
-                    BackColor = System.Drawing.Color.Blue,
+                    BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(153)))), ((int)(((byte)(153))))),
+                    FlatStyle = System.Windows.Forms.FlatStyle.Flat,
                     ForeColor = System.Drawing.Color.White
                 };
+                downloadAllButton.FlatAppearance.BorderSize = 0;
                 downloadAllButton.Click += async (s, e) =>
                 {
                     downloadAllButton.Enabled = false;
@@ -84,8 +86,8 @@ namespace YoutubeVideosDownloaderPro.Core
                         {
                             var tcs = new TaskCompletionSource<bool>();
                             downloadCompletions[button] = tcs;
-                            button.PerformClick(); // بيتنفذ على الـ UI thread زي ما المفروض
-                            await tcs.Task; // بتستنى هنا لحد ما التحميل يخلص فعلاً، من غير ما تعمل block
+                            button.PerformClick();
+                            await tcs.Task;
                         }
                     }
                 };
@@ -125,7 +127,7 @@ namespace YoutubeVideosDownloaderPro.Core
                     var panel = await CreateVideoPanelAsync(result.Video, result.Manifest, yOffset, cancellationTokenSource.Token);
                     downloadForm.Controls.Add(panel);
                 }
-                    yOffset += 360;
+                yOffset += 370;
             }
 
             downloadForm.ShowDialog();
@@ -137,7 +139,7 @@ namespace YoutubeVideosDownloaderPro.Core
             {
                 Location = new System.Drawing.Point(10, yOffset),
                 Size = new System.Drawing.Size(660, 360),
-                BackColor = System.Drawing.Color.LightGray,
+                BackColor = System.Drawing.Color.FromArgb(40, 40, 40),
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
 
@@ -146,8 +148,8 @@ namespace YoutubeVideosDownloaderPro.Core
                 Location = new System.Drawing.Point(330, 10),
                 Size = new System.Drawing.Size(320, 180),
                 SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage,
-                BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D,
-                BackColor = System.Drawing.Color.Gray
+                BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle,
+                BackColor = System.Drawing.Color.FromArgb(55, 55, 55)
             };
             await LoadThumbnailIntoPictureBoxAsync(pictureBox, video, cancellationToken);
             panel.Controls.Add(pictureBox);
@@ -161,6 +163,8 @@ namespace YoutubeVideosDownloaderPro.Core
                 Size = new System.Drawing.Size(130, 30),
                 DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
                 Font = LabelFont,
+                BackColor = System.Drawing.Color.FromArgb(45, 45, 45),
+                ForeColor = System.Drawing.Color.FromArgb(200, 200, 200),
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
             for (int i = 0; i < videoStreams.Count; i++)
@@ -175,6 +179,8 @@ namespace YoutubeVideosDownloaderPro.Core
                 Size = new System.Drawing.Size(100, 30),
                 DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
                 Font = LabelFont,
+                BackColor = System.Drawing.Color.FromArgb(45, 45, 45),
+                ForeColor = System.Drawing.Color.FromArgb(200, 200, 200),
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes,
                 Visible = false
             };
@@ -195,9 +201,11 @@ namespace YoutubeVideosDownloaderPro.Core
                 Size = new System.Drawing.Size(160, 30),
                 Font = LabelFont,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes,
-                BackColor = System.Drawing.Color.Green,
+                BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(153)))), ((int)(((byte)(153))))),
+                FlatStyle = System.Windows.Forms.FlatStyle.Flat,
                 ForeColor = System.Drawing.Color.White
             };
+            DownloadButton.FlatAppearance.BorderSize = 0;
 
             QualityComboBox.SelectedIndexChanged += (s, e) =>
             {
@@ -286,7 +294,7 @@ namespace YoutubeVideosDownloaderPro.Core
             {
                 Location = new System.Drawing.Point(10, yOffset),
                 Size = new System.Drawing.Size(660, 360),
-                BackColor = System.Drawing.Color.LightGray,
+                BackColor = System.Drawing.Color.FromArgb(40, 40, 40),
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
 
@@ -296,7 +304,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 Location = new System.Drawing.Point(10, 10),
                 Size = new System.Drawing.Size(640, 80),
                 Font = LabelFont,
-                ForeColor = System.Drawing.Color.Red,
+                ForeColor = System.Drawing.Color.FromArgb(255, 100, 100),
                 AutoSize = false,
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
@@ -330,6 +338,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 Location = new System.Drawing.Point(10, yPosition),
                 Size = LabelSize,
                 Font = LabelFont,
+                ForeColor = System.Drawing.Color.FromArgb(200, 200, 200),
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
             return label;
