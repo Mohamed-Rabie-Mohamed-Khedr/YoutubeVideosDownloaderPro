@@ -18,11 +18,34 @@ namespace YoutubeVideosDownloaderPro.Core
         private static readonly HttpClient httpClient = new HttpClient();
         private static string ffmpegPath;
 
-        public static async Task<Video> GetVideoAsync(string videoUrl, CancellationToken cancellationToken) =>
-            await youtube.Videos.GetAsync(videoUrl, cancellationToken);
+        public static async Task<Video> GetVideoAsync(string videoUrl, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await youtube.Videos.GetAsync(videoUrl, cancellationToken);
+            }
+            catch (OperationCanceledException) { return null; }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
+                return null;
+            }
+        }
 
-        public static async Task<StreamManifest> GetStreamManifestAsync(string videoId, CancellationToken cancellationToken) =>
-            await youtube.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
+        public static async Task<StreamManifest> GetStreamManifestAsync(string videoId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await youtube.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
+            }
+            catch (OperationCanceledException) { return null; }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
+                return null;
+            }
+        }
+
         public static List<VideoOnlyStreamInfo> GetBestVideoStreams(StreamManifest streamManifest)
         {
             return streamManifest.GetVideoOnlyStreams()
@@ -39,13 +62,17 @@ namespace YoutubeVideosDownloaderPro.Core
                 if (string.IsNullOrWhiteSpace(thumbnailUrl)) return null;
 
                 string cleanUrl = thumbnailUrl.Split('?')[0];
-                var response = await httpClient.GetAsync(cleanUrl, cancellationToken);
-                if (!response.IsSuccessStatusCode) return null;
+                using (var response = await httpClient.GetAsync(cleanUrl, cancellationToken))
+                {
+                    if (!response.IsSuccessStatusCode) return null;
 
-                return await response.Content.ReadAsByteArrayAsync();
+                    return await response.Content.ReadAsByteArrayAsync();
+                }
             }
-            catch
+            catch (OperationCanceledException) { return null; }
+            catch (Exception ex)
             {
+                EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
                 return null;
             }
         }
@@ -54,24 +81,26 @@ namespace YoutubeVideosDownloaderPro.Core
         
         public static async Task<bool> EnsureFFmpegAsync(CancellationToken cancellationToken)
         {
-            if (!IsFFmpegReady)
-                ffmpegPath = await Helper.EnsureFFmpegExistsAsync(cancellationToken);
+            if (!IsFFmpegReady) ffmpegPath = await Helper.EnsureFFmpegExistsAsync(cancellationToken);
             return IsFFmpegReady;
         }
         
         public static string BuildUniqueOutputPath(string title, string folderPath, string extension)
         {
             string safeTitle = string.Join("_", title.Split(Path.GetInvalidFileNameChars()));
+            string baseTitle = safeTitle;
+
             int counter = 1;
+
             while (File.Exists(Path.Combine(folderPath, $"{safeTitle}{extension}")))
             {
-                safeTitle = $"{safeTitle}_{counter}";
+                safeTitle = $"{baseTitle}_{counter}";
                 counter++;
             }
             return Path.Combine(folderPath, $"{safeTitle}{extension}");
         }
         
-        public static async Task DownloadAndProcessAsync(
+        public static async Task<Exception> DownloadAndProcessAsync(
             StreamManifest streamManifest,
             VideoOnlyStreamInfo selectedVideoStream,
             string mp3Bitrate,
@@ -80,10 +109,7 @@ namespace YoutubeVideosDownloaderPro.Core
             CancellationToken cancellationToken)
         {
             var audioStreamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-            if (audioStreamInfo == null)
-            {
-                throw new InvalidOperationException("هذا الفيديو لا يحتوي على مسار صوتي.");
-            }
+            if (audioStreamInfo == null) return new InvalidOperationException("هذا الفيديو لا يحتوي على مسار صوتي.");
             string tempVideoPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_video.tmp");
             string tempAudioPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_audio.tmp");
 
@@ -115,18 +141,41 @@ namespace YoutubeVideosDownloaderPro.Core
                 using (var process = Process.Start(psi))
                 using (cancellationToken.Register(() =>
                 {
-                    try { if (!process.HasExited) process.Kill(); } catch { }
+                    try
+                    {
+                        if (!process.HasExited)
+                            process.Kill();
+                    }
+                    catch { }
                 }))
                 {
                     await Task.Run(() => process.WaitForExit());
+
                     cancellationToken.ThrowIfCancellationRequested();
+
+                    if (process.ExitCode != 0)
+                        return new Exception($"FFmpeg exited with code {process.ExitCode}");
                 }
+            }
+            catch (OperationCanceledException ex){ return ex; }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
+                return ex;
             }
             finally
             {
-                if (File.Exists(tempVideoPath)) File.Delete(tempVideoPath);
-                if (File.Exists(tempAudioPath)) File.Delete(tempAudioPath);
+                try
+                {
+                    if (File.Exists(tempVideoPath)) File.Delete(tempVideoPath);
+                    if (File.Exists(tempAudioPath)) File.Delete(tempAudioPath);
+                }
+                catch (Exception ex)
+                {
+                    EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
+                }
             }
+            return null;
         }
     }
 }

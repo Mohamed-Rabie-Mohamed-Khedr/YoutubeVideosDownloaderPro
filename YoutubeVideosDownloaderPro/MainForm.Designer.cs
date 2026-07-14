@@ -75,7 +75,7 @@
             this.downloadPlaylistButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.downloadPlaylistButton.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.downloadPlaylistButton.ForeColor = System.Drawing.Color.White;
-            this.downloadPlaylistButton.Location = new System.Drawing.Point(285, 228);
+            this.downloadPlaylistButton.Location = new System.Drawing.Point(241, 228);
             this.downloadPlaylistButton.Name = "downloadPlaylistButton";
             this.downloadPlaylistButton.Size = new System.Drawing.Size(226, 40);
             this.downloadPlaylistButton.TabIndex = 9;
@@ -88,17 +88,17 @@
             this.playlistUrlLabel.AutoSize = true;
             this.playlistUrlLabel.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.playlistUrlLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(200)))), ((int)(((byte)(200)))));
-            this.playlistUrlLabel.Location = new System.Drawing.Point(628, 167);
+            this.playlistUrlLabel.Location = new System.Drawing.Point(584, 167);
             this.playlistUrlLabel.Name = "playlistUrlLabel";
-            this.playlistUrlLabel.Size = new System.Drawing.Size(130, 25);
+            this.playlistUrlLabel.Size = new System.Drawing.Size(186, 25);
             this.playlistUrlLabel.TabIndex = 8;
-            this.playlistUrlLabel.Text = "رابط المقطع";
+            this.playlistUrlLabel.Text = "رابط قائمة تشغيل";
             // 
             // playlistUrlIconBox
             // 
             this.playlistUrlIconBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
             this.playlistUrlIconBox.Image = global::YoutubeVideosDownloaderPro.Properties.Resources.attachment;
-            this.playlistUrlIconBox.Location = new System.Drawing.Point(172, 167);
+            this.playlistUrlIconBox.Location = new System.Drawing.Point(128, 167);
             this.playlistUrlIconBox.Name = "playlistUrlIconBox";
             this.playlistUrlIconBox.Size = new System.Drawing.Size(28, 28);
             this.playlistUrlIconBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
@@ -111,7 +111,7 @@
             this.playlistUrlTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.playlistUrlTextBox.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.playlistUrlTextBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(200)))), ((int)(((byte)(200)))));
-            this.playlistUrlTextBox.Location = new System.Drawing.Point(206, 162);
+            this.playlistUrlTextBox.Location = new System.Drawing.Point(162, 162);
             this.playlistUrlTextBox.Name = "playlistUrlTextBox";
             this.playlistUrlTextBox.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.playlistUrlTextBox.Size = new System.Drawing.Size(400, 33);
@@ -121,7 +121,7 @@
             // 
             this.playlistPictureBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
             this.playlistPictureBox.Image = global::YoutubeVideosDownloaderPro.Properties.Resources.youtube;
-            this.playlistPictureBox.Location = new System.Drawing.Point(368, 40);
+            this.playlistPictureBox.Location = new System.Drawing.Point(324, 40);
             this.playlistPictureBox.Name = "playlistPictureBox";
             this.playlistPictureBox.Size = new System.Drawing.Size(64, 64);
             this.playlistPictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.AutoSize;
@@ -131,7 +131,6 @@
             // tabControl1
             // 
             this.tabControl1.Appearance = System.Windows.Forms.TabAppearance.FlatButtons;
-            this.tabControl1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(30)))), ((int)(((byte)(30)))));
             this.tabControl1.Controls.Add(this.tabPage1);
             this.tabControl1.Controls.Add(this.tabPage2);
             this.tabControl1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -168,7 +167,7 @@
             this.downloadVideoButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.downloadVideoButton.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.downloadVideoButton.ForeColor = System.Drawing.Color.White;
-            this.downloadVideoButton.Location = new System.Drawing.Point(285, 228);
+            this.downloadVideoButton.Location = new System.Drawing.Point(241, 228);
             this.downloadVideoButton.Name = "downloadVideoButton";
             this.downloadVideoButton.Size = new System.Drawing.Size(226, 40);
             this.downloadVideoButton.TabIndex = 4;
@@ -181,7 +180,7 @@
             this.videoUrlLabel.AutoSize = true;
             this.videoUrlLabel.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.videoUrlLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(200)))), ((int)(((byte)(200)))));
-            this.videoUrlLabel.Location = new System.Drawing.Point(628, 167);
+            this.videoUrlLabel.Location = new System.Drawing.Point(584, 167);
             this.videoUrlLabel.Name = "videoUrlLabel";
             this.videoUrlLabel.Size = new System.Drawing.Size(130, 25);
             this.videoUrlLabel.TabIndex = 3;
@@ -191,7 +190,7 @@
             // 
             this.videoUrlIconBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
             this.videoUrlIconBox.Image = global::YoutubeVideosDownloaderPro.Properties.Resources.attachment;
-            this.videoUrlIconBox.Location = new System.Drawing.Point(172, 167);
+            this.videoUrlIconBox.Location = new System.Drawing.Point(128, 167);
             this.videoUrlIconBox.Name = "videoUrlIconBox";
             this.videoUrlIconBox.Size = new System.Drawing.Size(28, 28);
             this.videoUrlIconBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
@@ -204,7 +203,7 @@
             this.videoUrlTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.videoUrlTextBox.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.videoUrlTextBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(200)))), ((int)(((byte)(200)))));
-            this.videoUrlTextBox.Location = new System.Drawing.Point(206, 162);
+            this.videoUrlTextBox.Location = new System.Drawing.Point(162, 162);
             this.videoUrlTextBox.Name = "videoUrlTextBox";
             this.videoUrlTextBox.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.videoUrlTextBox.Size = new System.Drawing.Size(400, 33);
@@ -214,7 +213,7 @@
             // 
             this.videoPictureBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(45)))), ((int)(((byte)(45)))), ((int)(((byte)(45)))));
             this.videoPictureBox.Image = global::YoutubeVideosDownloaderPro.Properties.Resources.youtube;
-            this.videoPictureBox.Location = new System.Drawing.Point(368, 40);
+            this.videoPictureBox.Location = new System.Drawing.Point(324, 40);
             this.videoPictureBox.Name = "videoPictureBox";
             this.videoPictureBox.Size = new System.Drawing.Size(64, 64);
             this.videoPictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.AutoSize;
@@ -229,7 +228,7 @@
             this.browseFolderButton.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.browseFolderButton.ForeColor = System.Drawing.Color.White;
             this.browseFolderButton.Image = global::YoutubeVideosDownloaderPro.Properties.Resources.folder;
-            this.browseFolderButton.Location = new System.Drawing.Point(166, 347);
+            this.browseFolderButton.Location = new System.Drawing.Point(122, 347);
             this.browseFolderButton.Name = "browseFolderButton";
             this.browseFolderButton.Size = new System.Drawing.Size(34, 34);
             this.browseFolderButton.TabIndex = 8;
@@ -241,7 +240,7 @@
             this.downloadPathLabel.AutoSize = true;
             this.downloadPathLabel.Font = new System.Drawing.Font("Tahoma", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.downloadPathLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(200)))), ((int)(((byte)(200)))));
-            this.downloadPathLabel.Location = new System.Drawing.Point(628, 350);
+            this.downloadPathLabel.Location = new System.Drawing.Point(584, 350);
             this.downloadPathLabel.Name = "downloadPathLabel";
             this.downloadPathLabel.Size = new System.Drawing.Size(148, 25);
             this.downloadPathLabel.TabIndex = 7;
@@ -253,7 +252,7 @@
             this.downloadPathTextBox.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.downloadPathTextBox.Font = new System.Drawing.Font("Tahoma", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.downloadPathTextBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(200)))), ((int)(((byte)(200)))));
-            this.downloadPathTextBox.Location = new System.Drawing.Point(206, 348);
+            this.downloadPathTextBox.Location = new System.Drawing.Point(162, 348);
             this.downloadPathTextBox.Name = "downloadPathTextBox";
             this.downloadPathTextBox.ReadOnly = true;
             this.downloadPathTextBox.RightToLeft = System.Windows.Forms.RightToLeft.No;
@@ -264,7 +263,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.FromArgb(30, 30, 30);
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(30)))), ((int)(((byte)(30)))));
             this.ClientSize = new System.Drawing.Size(800, 450);
             this.Controls.Add(this.tabControl1);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;

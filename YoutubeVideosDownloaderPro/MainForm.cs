@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using YoutubeExplode;
@@ -17,6 +18,11 @@ namespace YoutubeVideosDownloaderPro
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            if (!EventLog.SourceExists(Helper.AppName))
+            {
+                EventLog.CreateEventSource(Helper.AppName, "Application");
+            }
+            EventLog.WriteEntry(Helper.AppName, "Application started in Time: " + DateTime.Now.ToString(), EventLogEntryType.Information);
             downloadPathTextBox.Text = Helper.GetDownloadsFolder();
         }
 
@@ -29,17 +35,28 @@ namespace YoutubeVideosDownloaderPro
             if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
             {
                 downloadPathTextBox.Text = folderBrowserDialog.SelectedPath;
-                Helper.DownloadsPathSave(downloadPathTextBox.Text);
+                Helper.SaveDownloadsPath(downloadPathTextBox.Text);
             }
         }
 
         private async void downloadVideoButton_Click(object sender, EventArgs e)
         {
+            if (!Helper.IsValidYouTubeVideoUrl(videoUrlTextBox.Text))
+            {
+                MessageBox.Show("الرابط الذي أدخلته ليس رابط فيديو صحيح.", "خطأ", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             downloadVideoButton.Enabled = downloadPlaylistButton.Enabled = false;
             downloadVideoButton.Text = "جاري التحميل...";
             try
             {
                 await VideoDownloadFormBuilder.BuildVideoDownloadFormAsync(new List<string> { videoUrlTextBox.Text }, downloadPathTextBox.Text);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(Helper.AppName, $"Failed to fetch video: {ex.Message}", EventLogEntryType.Error);
+                MessageBox.Show("تعذّر جلب الفيديو، تأكد من الرابط واتصال الإنترنت", "خطأ", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -59,10 +76,16 @@ namespace YoutubeVideosDownloaderPro
                     using (var youtube = new YoutubeClient())
                     {
                         var urls = new List<string>();
+             
                         await foreach (var video in youtube.Playlists.GetVideosAsync(playlistUrlTextBox.Text).WithCancellation(cancellationTokenSource.Token))
                         {
                             urls.Add(video.Url);
                             downloadPlaylistButton.Text = $"جاري التحميل... ({urls.Count})";
+                        }
+                        if (urls.Count == 0)
+                        {
+                            MessageBox.Show("قائمة التشغيل فارغة.", "خطأ", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
                         }
                         await VideoDownloadFormBuilder.BuildVideoDownloadFormAsync(urls, downloadPathTextBox.Text);
                     }
@@ -73,8 +96,9 @@ namespace YoutubeVideosDownloaderPro
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception)
+            catch (Exception ex)
             {
+                EventLog.WriteEntry(Helper.AppName, $"Failed to fetch playlist: {ex.Message}", EventLogEntryType.Error);
                 MessageBox.Show("تعذّر جلب قائمة التشغيل، تأكد من الرابط واتصال الإنترنت", "خطأ", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -87,6 +111,7 @@ namespace YoutubeVideosDownloaderPro
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             cancellationTokenSource.Cancel();
+            cancellationTokenSource.Dispose();
         }
     }
 }

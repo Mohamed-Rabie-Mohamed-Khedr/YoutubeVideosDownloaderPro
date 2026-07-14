@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -14,25 +15,23 @@ namespace YoutubeVideosDownloaderPro.Core
         private static readonly System.Drawing.Font LabelFont = new System.Drawing.Font("Arial", 15.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
         private static string folderPath;
         private static List<System.Windows.Forms.Button> downloadButtons = new();
-        private static System.Threading.SemaphoreSlim videoInfoSemaphore = new System.Threading.SemaphoreSlim(5);
+        private static System.Threading.SemaphoreSlim videoInfoSemaphore = new(5);
         private static Dictionary<System.Windows.Forms.Button, TaskCompletionSource<bool>> downloadCompletions = new();
+        private enum DownloadState
+        {
+            None,
+            WaitingForDownload,
+            Downloading,
+            Downloaded
+        }
         private static bool IsVideoDownloading()
         {
-            return downloadButtons.Any(b => b.Tag?.ToString() == "Downloading");
+            return downloadButtons.Any(b => (DownloadState)b.Tag == DownloadState.WaitingForDownload || (DownloadState)b.Tag == DownloadState.Downloading);
         }
         
         public static async Task BuildVideoDownloadFormAsync(List<string> videoUrls, string folderPath)
         {
             VideoDownloadFormBuilder.folderPath = folderPath;
-            videoUrls = videoUrls?
-                .Where(url => Helper.IsValidYouTubeUrl(url))
-                .ToList() ?? new List<string>();
-            if (videoUrls.Count == 0)
-            {
-                System.Windows.Forms.MessageBox.Show("الرجاء إدخال رابط المقطع أو معرّف يوتيوب صحيح", "خطأ في الإدخال", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button1, System.Windows.Forms.MessageBoxOptions.RightAlign);
-                return;
-            }
-
             var downloadForm = new System.Windows.Forms.Form()
             {
                 Name = "DownloadForm",
@@ -55,10 +54,19 @@ namespace YoutubeVideosDownloaderPro.Core
                 {
                     var result = System.Windows.Forms.MessageBox.Show("هناك عملية تحميل جارية. هل أنت متأكد أنك تريد إغلاق النافذة؟", "تأكيد الإغلاق", System.Windows.Forms.MessageBoxButtons.YesNo, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button2, System.Windows.Forms.MessageBoxOptions.RightAlign);
                     if (result == System.Windows.Forms.DialogResult.Yes)
+                    {
                         cancellationTokenSource.Cancel();
+                    }
                     else
                         e.Cancel = true;
                 }
+            };
+
+            downloadForm.FormClosed += (s, e) =>
+            {
+                cancellationTokenSource.Dispose();
+                downloadButtons.Clear();
+                downloadCompletions.Clear();
             };
 
             int yOffset;
@@ -79,14 +87,19 @@ namespace YoutubeVideosDownloaderPro.Core
                 downloadAllButton.Click += async (s, e) =>
                 {
                     downloadAllButton.Enabled = false;
-                    var buttonsSnapshot = downloadButtons.ToList();
-                    foreach (var button in buttonsSnapshot)
+                    for (int i = 0; i < downloadButtons.Count; i++)
                     {
-                        if (string.IsNullOrEmpty(button.Tag?.ToString()))
+                        if ((DownloadState)downloadButtons[i].Tag == DownloadState.None)
+                            downloadButtons[i].Tag = DownloadState.WaitingForDownload;
+                    }
+
+                    for (int i = 0; i < downloadButtons.Count; i++)
+                    {
+                        if ((DownloadState)downloadButtons[i].Tag == DownloadState.WaitingForDownload && downloadButtons[i].Enabled)
                         {
                             var tcs = new TaskCompletionSource<bool>();
-                            downloadCompletions[button] = tcs;
-                            button.PerformClick();
+                            downloadCompletions[downloadButtons[i]] = tcs;
+                            downloadButtons[i].PerformClick();
                             await tcs.Task;
                         }
                     }
@@ -102,7 +115,9 @@ namespace YoutubeVideosDownloaderPro.Core
                 try
                 {
                     var video = await VideoDownloadService.GetVideoAsync(url, cancellationTokenSource.Token);
+                    if (video == null) throw new InvalidOperationException("Failed to fetch video information.");
                     var manifest = await VideoDownloadService.GetStreamManifestAsync(video.Id, cancellationTokenSource.Token);
+                    if (manifest == null) throw new InvalidOperationException("Failed to fetch stream manifest.");
                     return (Url: url, Video: video, Manifest: manifest);
                 }
                 catch
@@ -197,6 +212,7 @@ namespace YoutubeVideosDownloaderPro.Core
             System.Windows.Forms.Button DownloadButton = new System.Windows.Forms.Button()
             {
                 Text = "تحميل المقطع",
+                Tag = DownloadState.None,
                 Location = new System.Drawing.Point(490, 320),
                 Size = new System.Drawing.Size(160, 30),
                 Font = LabelFont,
@@ -223,8 +239,8 @@ namespace YoutubeVideosDownloaderPro.Core
 
             DownloadButton.Click += async (s, e) =>
             {
-                downloadButtons.Remove(DownloadButton);
-                DownloadButton.Tag = "Downloading";
+                LabelUpdate(percentageLabel, "0%", System.Drawing.Color.FromArgb(255, 255, 128));
+                DownloadButton.Tag = DownloadState.Downloading;
                 DownloadButton.Enabled = false;
                 QualityComboBox.Enabled = false;
                 Mp3BitrateComboBox.Enabled = false;
@@ -243,6 +259,11 @@ namespace YoutubeVideosDownloaderPro.Core
                     {
                         downloadButtons.ForEach(b => b.Enabled = false);
                         bool ready = await VideoDownloadService.EnsureFFmpegAsync(cancellationToken);
+                        downloadButtons.ForEach(b =>
+                        {
+                            if ((DownloadState)b.Tag != DownloadState.Downloading)
+                                b.Enabled = true;
+                        });
                         if (!ready)
                         {
                             System.Windows.Forms.MessageBox.Show("تعذّر تحميل ffmpeg.exe، تأكد من اتصال الإنترنت وحاول مرة أخرى", "خطأ", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
@@ -256,26 +277,25 @@ namespace YoutubeVideosDownloaderPro.Core
                     });
 
                     string mp3Bitrate = Mp3BitrateComboBox.SelectedItem.ToString();
-                    await VideoDownloadService.DownloadAndProcessAsync(streamManifest, selectedStream, mp3Bitrate, fullOutputPath, progressHandler, cancellationToken);
-                    DownloadButton.Tag = "Downloaded";
-                    percentageLabel.Text = "تم تحميل المقطع بنجاح";
-                    if (downloadButtons.Count == 0)
-                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{fullOutputPath}\"");
+                    Exception downloadException = await VideoDownloadService.DownloadAndProcessAsync(streamManifest, selectedStream, mp3Bitrate, fullOutputPath, progressHandler, cancellationToken);
+                    if (downloadException != null) throw downloadException;
+                    DownloadButton.Tag = DownloadState.Downloaded;
+                    LabelUpdate(percentageLabel, "تم التحميل بنجاح", System.Drawing.Color.FromArgb(100, 255, 100));
+                    if (!IsVideoDownloading()) Process.Start("explorer.exe", $"/select,\"{fullOutputPath}\"");
                 }
                 catch (OperationCanceledException) { }
-                catch
+                catch (Exception ex)
                 {
-                    DownloadButton.Tag = null;
+                    DownloadButton.Tag = DownloadState.None;
+                    EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
                     DownloadButton.Enabled = true;
-                    percentageLabel.Text = "حدث خطأ أثناء تحميل المقطع";
+                    LabelUpdate(percentageLabel, "حدث خطأ أثناء تحميل المقطع", System.Drawing.Color.FromArgb(255, 100, 100));
                 }
                 finally
                 {
                     DownloadButton.Text = "تحميل المقطع";
-                    downloadButtons.ForEach(b => { if (b.Tag?.ToString() != "Downloading") b.Enabled = true; });
                     QualityComboBox.Enabled = true;
                     Mp3BitrateComboBox.Enabled = true;
-
 
                     if (downloadCompletions.TryGetValue(DownloadButton, out var tcs))
                     {
@@ -325,8 +345,9 @@ namespace YoutubeVideosDownloaderPro.Core
                     pictureBox.Image = (System.Drawing.Bitmap)bmp.Clone();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                EventLog.WriteEntry(Helper.AppName, ex.Message, EventLogEntryType.Error);
             }
         }
 
@@ -342,6 +363,11 @@ namespace YoutubeVideosDownloaderPro.Core
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes
             };
             return label;
+        }
+        private static void LabelUpdate(System.Windows.Forms.Label label, string text, System.Drawing.Color color)
+        {
+            label.Text = text;
+            label.ForeColor = color;
         }
     }
 }

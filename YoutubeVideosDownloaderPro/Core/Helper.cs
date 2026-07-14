@@ -1,27 +1,74 @@
 ﻿using Microsoft.Win32;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace YoutubeVideosDownloaderPro.Core
 {
     internal class Helper
     {
-        private static readonly Regex PlaylistUrlRegex = new Regex(@"[?&]list=([a-zA-Z0-9_-]+)", RegexOptions.IgnoreCase);
-
+        public const string AppName = "YoutubeVideosDownloaderPro";
+        private static readonly Regex PlaylistUrlRegex = new Regex(@"[?&]list=([a-zA-Z0-9_-]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex VideoIdRegex = new Regex(@"^[A-Za-z0-9_-]{11}$", RegexOptions.Compiled);
         public static bool IsPlaylistUrl(string url)
         {
             return !string.IsNullOrWhiteSpace(url) && PlaylistUrlRegex.IsMatch(url.Trim());
         }
 
-        public static bool IsValidYouTubeUrl(string url)
+        public static bool IsValidYouTubeVideoUrl(string url)
         {
-            return !string.IsNullOrWhiteSpace(url) && Regex.IsMatch(url.Trim(), @"^([a-zA-Z0-9_-]{11}|(https?://)?(www\.)?(youtube\.com|youtu\.be)/.*)$");
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+
+            url = url.Trim();
+
+            // إذا أدخل المستخدم ID الفيديو فقط
+            if (VideoIdRegex.IsMatch(url))
+                return true;
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
+                return false;
+
+            string host = uri.Host.ToLowerInvariant();
+
+            // youtu.be/VIDEO_ID
+            if (host == "youtu.be")
+            {
+                string id = uri.AbsolutePath.Trim('/');
+                return VideoIdRegex.IsMatch(id);
+            }
+
+            // youtube.com
+            if (host == "youtube.com" || host == "www.youtube.com" || host == "m.youtube.com")
+            {
+                // watch?v=VIDEO_ID
+                if (uri.AbsolutePath.Equals("/watch", StringComparison.OrdinalIgnoreCase))
+                {
+                    string id = System.Web.HttpUtility.ParseQueryString(uri.Query)["v"];
+                    return VideoIdRegex.IsMatch(id ?? "");
+                }
+
+                // shorts/VIDEO_ID
+                if (uri.AbsolutePath.StartsWith("/shorts/", StringComparison.OrdinalIgnoreCase))
+                {
+                    string id = uri.AbsolutePath.Substring("/shorts/".Length);
+                    return VideoIdRegex.IsMatch(id);
+                }
+
+                // live/VIDEO_ID
+                if (uri.AbsolutePath.StartsWith("/live/", StringComparison.OrdinalIgnoreCase))
+                {
+                    string id = uri.AbsolutePath.Substring("/live/".Length);
+                    return VideoIdRegex.IsMatch(id);
+                }
+            }
+
+            return false;
         }
 
         // تعريف الـ GUID الخاص بمجلد التحميلات في نظام ويندوز
@@ -41,14 +88,21 @@ namespace YoutubeVideosDownloaderPro.Core
                     if (rk != null)
                     {
                         object value = rk.GetValue("DownloadsPath");
+
                         if (value != null)
                         {
-                            return value.ToString();
+                            string DownloadsPath = value.ToString();
+
+                            if (Directory.Exists(DownloadsPath))
+                                return DownloadsPath;
                         }
                     }
                 }
             }
-            catch {}
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(AppName, ex.Message, EventLogEntryType.Error);
+            }
 
             // استخدام SHGetKnownFolderPath لجلب مسار التحميلات
             int result = SHGetKnownFolderPath(DownloadsGuid, 0, IntPtr.Zero, out string path);
@@ -63,7 +117,7 @@ namespace YoutubeVideosDownloaderPro.Core
             }
         }
 
-        public static void DownloadsPathSave(string path)
+        public static void SaveDownloadsPath(string path)
         {
             using (RegistryKey rk = Registry.CurrentUser.CreateSubKey(RegistryPath, true))
             {
@@ -94,8 +148,6 @@ namespace YoutubeVideosDownloaderPro.Core
                 }
             }
 
-            MessageBox.Show("يتم الآن تحميل ملفات البرنامج الأساسية (FFmpeg) تلقائياً، قد يستغرق هذا دقيقة بناءً على سرعة الإنترنت لديك.", "تهيئة البرنامج", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RightAlign);
-
             string tempZipPath = Path.Combine(Path.GetTempPath(), "ffmpeg_temp.zip");
             string tempExtractPath = Path.Combine(Path.GetTempPath(), "ffmpeg_extracted");
             string downloadUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
@@ -106,21 +158,23 @@ namespace YoutubeVideosDownloaderPro.Core
                 using (var httpClient = new HttpClient())
                 {
                     // ResponseHeadersRead حمل محتوى على دفعات، بحيث نقدر نبدأ في الكتابة على القرص قبل ما يكتمل التحميل بالكامل.
-                    var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                    response.EnsureSuccessStatusCode();
-
-                    // 2. حفظ ملف ZIP المؤقت على القرص
-                    using (var responseStream = await response.Content.ReadAsStreamAsync())
-                    using (var fs = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                    using (var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                     {
-                        // مصفوفة للقراءة والكتابة من وإلى محتوى الاستجابة، بحجم 80 كيلوبايت لكل عملية.
-                        byte[] buffer = new byte[81920];
-                        // متغير هيحمل "عدد البايتات الفعلية" اللي اتقرت في كل دورة من الحلقة
-                        int bytesRead;
-                        // حلقة لقراءة البيانات من الاستجابة وكتابتها في الملف المؤقت
-                        while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                        response.EnsureSuccessStatusCode();
+
+                        // 2. حفظ ملف ZIP المؤقت على القرص
+                        using (var responseStream = await response.Content.ReadAsStreamAsync())
+                        using (var fs = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
                         {
-                            await fs.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                            // مصفوفة للقراءة والكتابة من وإلى محتوى الاستجابة، بحجم 80 كيلوبايت لكل عملية.
+                            byte[] buffer = new byte[81920];
+                            // متغير هيحمل "عدد البايتات الفعلية" اللي اتقرت في كل دورة من الحلقة
+                            int bytesRead;
+                            // حلقة لقراءة البيانات من الاستجابة وكتابتها في الملف المؤقت
+                            while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+                            {
+                                await fs.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                            }
                         }
                     }
                 }
@@ -139,7 +193,6 @@ namespace YoutubeVideosDownloaderPro.Core
                 {
                     if (File.Exists(targetFilePath)) File.Delete(targetFilePath);
                     File.Move(files[0], targetFilePath);
-                    MessageBox.Show("تم تحميل وتثبيت أداة الدمج بنجاح!", "اكتملت التهيئة", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RightAlign);
                 }
                 else
                 {
@@ -149,14 +202,24 @@ namespace YoutubeVideosDownloaderPro.Core
             catch (OperationCanceledException)
             {
                 targetFilePath = null;
-                throw; // أعد رميها عشان الـ caller يتعرف عليها كـ cancellation حقيقي
             }
-            catch { targetFilePath = null; }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(AppName, ex.Message, EventLogEntryType.Error);
+                targetFilePath = null;
+            }
             finally
             {
                 // 6. تنظيف الملفات والمجلدات المؤقتة
-                if (File.Exists(tempZipPath)) File.Delete(tempZipPath);
-                if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true);
+                try
+                {
+                    if (File.Exists(tempZipPath)) File.Delete(tempZipPath);
+                    if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true);
+                }
+                catch (Exception ex)
+                {
+                    EventLog.WriteEntry(AppName, ex.Message, EventLogEntryType.Error);
+                }
             }
 
             return targetFilePath;
