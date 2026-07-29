@@ -119,7 +119,6 @@ namespace YoutubeVideosDownloaderPro.Core
                 {
                     var videoTask = youtube.Videos.Streams.DownloadAsync(selectedVideoStream, tempVideoPath, progress, cancellationToken).AsTask();
                     var audioTask = youtube.Videos.Streams.DownloadAsync(audioStreamInfo, tempAudioPath, null, cancellationToken).AsTask();
-
                     await Task.WhenAll(videoTask, audioTask);
                 }
                 else

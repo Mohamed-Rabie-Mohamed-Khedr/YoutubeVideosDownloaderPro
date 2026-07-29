@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using YoutubeExplode.Videos;
@@ -17,6 +16,12 @@ namespace YoutubeVideosDownloaderPro.Core
         private static List<System.Windows.Forms.Button> downloadButtons = new();
         private static System.Threading.SemaphoreSlim videoInfoSemaphore = new(5);
         private static Dictionary<System.Windows.Forms.Button, TaskCompletionSource<bool>> downloadCompletions = new();
+        private static List<System.Windows.Forms.ComboBox> qualityComboBoxs = new();
+        private static System.Windows.Forms.ComboBox qualityComboBoxsControl;
+        private static List<System.Windows.Forms.ComboBox> mp3BitrateComboBoxs = new();
+        private static System.Windows.Forms.ComboBox mp3BitrateComboBoxsControl;
+        private static readonly int[] bitrates = { 320, 256, 224, 192, 160, 128, 96, 64, 32 };
+
         private enum DownloadState
         {
             None,
@@ -45,8 +50,8 @@ namespace YoutubeVideosDownloaderPro.Core
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes,
                 RightToLeftLayout = true,
                 AutoScroll = true,
+                ShowInTaskbar = false,
             };
-
             System.Threading.CancellationTokenSource cancellationTokenSource = new System.Threading.CancellationTokenSource();
             downloadForm.FormClosing += (s, e) =>
             {
@@ -61,12 +66,20 @@ namespace YoutubeVideosDownloaderPro.Core
                         e.Cancel = true;
                 }
             };
-
             downloadForm.FormClosed += (s, e) =>
             {
                 cancellationTokenSource.Dispose();
                 downloadButtons.Clear();
                 downloadCompletions.Clear();
+                if (qualityComboBoxsControl != null)
+                {
+                    qualityComboBoxsControl.Dispose();
+                    qualityComboBoxsControl = null;
+                    mp3BitrateComboBoxsControl.Dispose();
+                    mp3BitrateComboBoxsControl = null;
+                    qualityComboBoxs.Clear();
+                    mp3BitrateComboBoxs.Clear();
+                }
             };
 
             int yOffset;
@@ -76,7 +89,7 @@ namespace YoutubeVideosDownloaderPro.Core
                 {
                     Text = "تحميل جميع المقاطع",
                     Location = new System.Drawing.Point(10, 10),
-                    Size = new System.Drawing.Size(660, 40),
+                    Size = new System.Drawing.Size(200, 40),
                     Font = LabelFont,
                     RightToLeft = System.Windows.Forms.RightToLeft.Yes,
                     BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(153)))), ((int)(((byte)(153))))),
@@ -105,6 +118,48 @@ namespace YoutubeVideosDownloaderPro.Core
                     }
                 };
                 downloadForm.Controls.Add(downloadAllButton);
+
+                qualityComboBoxsControl = new System.Windows.Forms.ComboBox()
+                {
+                    Location = new System.Drawing.Point(260, 10),
+                    Size = new System.Drawing.Size(130, 40),
+                    DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
+                    Font = LabelFont,
+                    BackColor = System.Drawing.Color.FromArgb(45, 45, 45),
+                    ForeColor = System.Drawing.Color.FromArgb(200, 200, 200),
+                    RightToLeft = System.Windows.Forms.RightToLeft.Yes
+                };
+                qualityComboBoxsControl.SelectedIndexChanged += (s, e) =>
+                {
+                    for (int i = 0; i < qualityComboBoxs.Count; i++)
+                    {
+                        if (qualityComboBoxs[i].Items.Contains(qualityComboBoxsControl.SelectedItem))
+                            qualityComboBoxs[i].SelectedItem = qualityComboBoxsControl.SelectedItem;
+                    }
+                    mp3BitrateComboBoxsControl.Visible = qualityComboBoxsControl.SelectedIndex == qualityComboBoxsControl.Items.Count - 1;
+                };
+                downloadForm.Controls.Add(qualityComboBoxsControl);
+
+                mp3BitrateComboBoxsControl = new System.Windows.Forms.ComboBox()
+                {
+                    Location = new System.Drawing.Point(440, 10),
+                    Size = new System.Drawing.Size(100, 40),
+                    DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
+                    Font = LabelFont,
+                    BackColor = System.Drawing.Color.FromArgb(45, 45, 45),
+                    ForeColor = System.Drawing.Color.FromArgb(200, 200, 200),
+                    RightToLeft = System.Windows.Forms.RightToLeft.Yes,
+                    Visible = false
+                };
+                mp3BitrateComboBoxsControl.SelectedIndexChanged += (s, e) =>
+                {
+                    for (int i = 0; i < mp3BitrateComboBoxs.Count; i++)
+                    {
+                        if (mp3BitrateComboBoxs[i].Items.Contains(mp3BitrateComboBoxsControl.SelectedItem))
+                            mp3BitrateComboBoxs[i].SelectedItem = mp3BitrateComboBoxsControl.SelectedItem;
+                    }
+                };
+                downloadForm.Controls.Add(mp3BitrateComboBoxsControl);
                 yOffset = 50;
             }
             else
@@ -186,7 +241,16 @@ namespace YoutubeVideosDownloaderPro.Core
                 QualityComboBox.Items.Add(videoStreams[i].VideoQuality);
             QualityComboBox.Items.Add("MP3");
             QualityComboBox.SelectedIndex = 0;
+            qualityComboBoxs.Add(QualityComboBox);
             panel.Controls.Add(QualityComboBox);
+
+            if (qualityComboBoxsControl != null && qualityComboBoxsControl.Items.Count < QualityComboBox.Items.Count)
+            {
+                qualityComboBoxsControl.Items.Clear();
+                foreach (var item in QualityComboBox.Items)
+                    qualityComboBoxsControl.Items.Add(item);
+                qualityComboBoxsControl.SelectedIndex = 0;
+            }
 
             System.Windows.Forms.ComboBox Mp3BitrateComboBox = new System.Windows.Forms.ComboBox()
             {
@@ -199,15 +263,8 @@ namespace YoutubeVideosDownloaderPro.Core
                 RightToLeft = System.Windows.Forms.RightToLeft.Yes,
                 Visible = false
             };
-            Mp3BitrateComboBox.Items.Add("320k");
-            Mp3BitrateComboBox.Items.Add("256k");
-            Mp3BitrateComboBox.Items.Add("192k");
-            Mp3BitrateComboBox.Items.Add("160k");
-            Mp3BitrateComboBox.Items.Add("128k");
-            Mp3BitrateComboBox.Items.Add("96k");
-            Mp3BitrateComboBox.Items.Add("64k");
-            Mp3BitrateComboBox.Items.Add("32k");
-            Mp3BitrateComboBox.SelectedIndex = 3;
+            SetMp3BitrateComboBox(Mp3BitrateComboBox,
+            streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate().Bitrate.KiloBitsPerSecond);
 
             System.Windows.Forms.Button DownloadButton = new System.Windows.Forms.Button()
             {
@@ -228,7 +285,16 @@ namespace YoutubeVideosDownloaderPro.Core
                 Mp3BitrateComboBox.Visible = QualityComboBox.SelectedIndex >= videoStreams.Count;
                 DownloadButton.Enabled = true;
             };
+            mp3BitrateComboBoxs.Add(Mp3BitrateComboBox);
             panel.Controls.Add(Mp3BitrateComboBox);
+
+            if (mp3BitrateComboBoxsControl != null && mp3BitrateComboBoxsControl.Items.Count < Mp3BitrateComboBox.Items.Count)
+            {
+                mp3BitrateComboBoxsControl.Items.Clear();
+                foreach (var item in Mp3BitrateComboBox.Items)
+                    mp3BitrateComboBoxsControl.Items.Add(item);
+                mp3BitrateComboBoxsControl.SelectedIndex = 0;
+            }
 
             panel.Controls.Add(AddLabel($"اسم المقطع: {video.Title}", 200));
             panel.Controls.Add(AddLabel($"صاحب المقطع: {video.Author.ChannelTitle}", 230));
@@ -308,6 +374,30 @@ namespace YoutubeVideosDownloaderPro.Core
             return panel;
         }
 
+        private static void SetMp3BitrateComboBox(System.Windows.Forms.ComboBox mp3BitrateComboBox, double highestBitrate)
+        {
+            int startIndex = bitrates.Length - 1;
+            for (int i = 0; i < bitrates.Length; i++)
+            {
+                if (bitrates[i] < highestBitrate)
+                {
+                    startIndex = i == 0 ? 0 : i - 1;
+                    break;
+                }
+                else if (bitrates[i] == highestBitrate)
+                {
+                    startIndex = i;
+                    break;
+                }
+            }
+
+            for (int i = startIndex; i < bitrates.Length; i++)
+            {
+                mp3BitrateComboBox.Items.Add($"{bitrates[i]}k");
+            }
+            mp3BitrateComboBox.SelectedIndex = 0;
+        }
+
         private static System.Windows.Forms.Panel CreateErrorPanel(string url, int yOffset)
         {
             var panel = new System.Windows.Forms.Panel()
@@ -339,7 +429,7 @@ namespace YoutubeVideosDownloaderPro.Core
 
             try
             {
-                using (var ms = new MemoryStream(imageData))
+                using (var ms = new System.IO.MemoryStream(imageData))
                 using (var bmp = new System.Drawing.Bitmap(ms))
                 {
                     pictureBox.Image = (System.Drawing.Bitmap)bmp.Clone();
